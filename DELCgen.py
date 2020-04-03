@@ -31,7 +31,7 @@ import scipy.special as sp
 from astropy.io import fits
  
 
-#__all__ = ['Mixture_Dist', 'BendingPL', 'RandAnyDist', 'Min_PDF','OptBins',
+#__all__ = ['Mixture_Dist', 'BendingPL', 'Bending2PL', 'RandAnyDist', 'Min_PDF','OptBins',
 #            'PSD_Prob','SD_estimate','TimmerKoenig','EmmanLC','Lightcurve',
 #            'Comparison_Plots','Load_Lightcurve','Simulate_TK_Lightcurve',
 #            'Simulate_DE_Lightcurve']
@@ -237,6 +237,29 @@ def BendingPL(v,A,v_bend,a_low,a_high,c):
     denom = 1 + (v/v_bend)**(a_high-a_low)
     out = A * (numer/denom) + c
     return out
+
+
+def Bending2PL(v,A,v_bend_2,v_bend_1,a_low,a_high,c):
+    '''
+    Bending power law function - returns power at each value of v, 
+    where v is an array (e.g. of frequencies)
+    
+    inputs:
+        v (array)       - input values
+        A (float)       - normalisation 
+        v_bend (float)  - bending frequency
+        a_low ((float)  - low frequency index
+        a_high float)   - high frequency index
+        c (float)       - intercept/offset
+    output:
+        out (array)     - output powers
+    '''
+
+    numer = 1
+    denom = (1 + (v/v_bend_1)**(2))* ((v/(v_bend_2))**(a_low) + (v/(v_bend_2))**(a_high))
+    out = A * (numer/denom) + c
+    return out
+
 
 def RandAnyDist(f,args,a,b,size=1):
     '''
@@ -459,8 +482,8 @@ def TimmerKoenig(RedNoiseL, aliasTbin, randomSeed, tbin, LClength,\
 
     # -------- Add complex Gaussian noise to PL --------------------------------
     rnd.seed(randomSeed)
-    real = (np.sqrt(powerlaw*0.5))*rnd.normal(0,1,((RedNoiseL*LClength)/2))
-    imag = (np.sqrt(powerlaw*0.5))*rnd.normal(0,1,((RedNoiseL*LClength)/2))
+    real = (np.sqrt(powerlaw*0.5))*rnd.normal(0,1,((int(RedNoiseL*LClength/2))))
+    imag = (np.sqrt(powerlaw*0.5))*rnd.normal(0,1,((int(RedNoiseL*LClength/2))))
     positive = np.vectorize(complex)(real,imag) # array of +ve, complex nos
     noisypowerlaw = np.append(positive,positive.conjugate()[::-1])
     znoisypowerlaw = np.insert(noisypowerlaw,0,complex(0.0,0.0)) # add 0
@@ -488,7 +511,7 @@ def TimmerKoenig(RedNoiseL, aliasTbin, randomSeed, tbin, LClength,\
 
     periodogram = np.absolute(fft)**2.0 * ((2.0*tbin*aliasTbin*RedNoiseL)/\
                    (LClength*(np.mean(lightcurve)**2)))   
-    shortPeriodogram = np.take(periodogram,range(1,LClength/2 +1))
+    shortPeriodogram = np.take(periodogram,range(1,LClength//2 +1))
     #shortFreq = np.take(frequency,range(1,LClength/2 +1))
     shortFreq = np.arange(1.0, (LClength)/2 +1)/ (LClength*tbin)
     shortPeriodogram = [shortFreq,shortPeriodogram]
@@ -572,7 +595,7 @@ def EmmanLC(time,RedNoiseL,aliasTbin,RandomSeed,tbin,
     
     # Produce Timmer & Koenig simulated LC
     if verbose:
-        print "Running Timmer & Koening..."
+        print ("Running Timmer & Koening...")
         
     tries = 0      
     success = False
@@ -597,7 +620,7 @@ def EmmanLC(time,RedNoiseL,aliasTbin,RandomSeed,tbin,
         # This has been fixed and should never happen now in theory...
         except IndexError:
             tries += 1
-            print "Simulation failed for some reason (IndexError) - restarting..."
+            print ("Simulation failed for some reason (IndexError) - restarting...")
 
     shortLC = [np.arange(len(shortLC))*tbin, shortLC]
     
@@ -623,28 +646,28 @@ def EmmanLC(time,RedNoiseL,aliasTbin,RandomSeed,tbin,
     
         if mix:     
             if verbose: 
-                print "Inverse tranform sampling..."
+                print ("Inverse tranform sampling...")
             dist = PDFmodel.Sample(PDFparams,length)
         elif scipy:
             if verbose: 
-                print "Inverse tranform sampling..."
+                print ("Inverse tranform sampling...")
             dist = PDFmodel.rvs(*PDFparams,size=length)
             
         else: # else use rejection
             if verbose: 
-                print "Rejection sampling... (slow!)"
+                print ("Rejection sampling... (slow!)")
             if maxFlux == None:
                 maxFlux = 1
             dist = RandAnyDist(PDFmodel,PDFparams,0,max(maxFlux)*1.2,length)
             dist = np.array(dist)
         
     if verbose:
-        print "mean:",np.mean(dist)
+        print ("mean:",np.mean(dist))
     sortdist = dist[np.argsort(dist)] # sort!
     
     # Iterate over the random sample until its PSD (and PDF) match the data
     if verbose:
-        print "Iterating..."
+        print ("Iterating...")
     i = 0
     oldSurrogate = np.array([-1])
     surrogate = np.array([1])
@@ -677,7 +700,7 @@ def EmmanLC(time,RedNoiseL,aliasTbin,RandomSeed,tbin,
         
         i += 1
     if verbose:
-        print "Converged in {} iterations".format(i)
+        print ("Converged in {} iterations".format(i))
     
     return surrogate, PSDlast, shortLC, periodogram, ffti
 
@@ -768,7 +791,7 @@ class Lightcurve(object):
         '''
         if PSDdist == None:
             if self.psdModel == None:
-                print "Fitting PSD for standard deviation estimation..."
+                print ("Fitting PSD for standard deviation estimation...")
                 self.Fit_PSD(verbose=False)
                 
             PSDdist = self.psdModel
@@ -878,27 +901,27 @@ class Lightcurve(object):
            'requested number of basinhopping iterations completed successfully':
             
             if verbose:
-                print "\n### Fit successful: ###"
+                print ("\n### Fit successful: ###")
                 #A,v_bend,a_low,a_high,c
                 
                 if model == BendingPL:
-                    print "Normalisation: {}".format(m['x'][0])
-                    print "Bend frequency: {}".format(m['x'][1])
-                    print "Low frequency index: {}".format(m['x'][2])
-                    print "high frequency index: {}".format(m['x'][3])
-                    print "Offset: {}".format(m['x'][4])
+                    print ("Normalisation: {}".format(m['x'][0]))
+                    print ("Bend frequency: {}".format(m['x'][1]))
+                    print ("Low frequency index: {}".format(m['x'][2]))
+                    print ("high frequency index: {}".format(m['x'][3]))
+                    print ("Offset: {}".format(m['x'][4]))
 
                 else:
                     for p in range(len(m['x'])):
-                        print "Parameter {}: {}".format(p+1,m['x'][p])
+                        print ("Parameter {}: {}".format(p+1,m['x'][p]))
             
             self.psdFit = m 
             self.psdModel = model
 
         else:
-            print "#### FIT FAILED ####"
-            print "Fit parameters not assigned."
-            print "Try different initial parameters with the 'initial_params' keyword argument" 
+            print ("#### FIT FAILED ####")
+            print ("Fit parameters not assigned.")
+            print ("Try different initial parameters with the 'initial_params' keyword argument" )
   
     
     def Fit_PDF(self, initial_params=[6,6, 0.3,7.4,0.8,0.2],
@@ -951,7 +974,7 @@ class Lightcurve(object):
         if m['success'] == True:
             
             if verbose:
-                print "\n### Fit successful: ###"
+                print ("\n### Fit successful: ###")
 
                 mix = False
                 try:
@@ -963,28 +986,28 @@ class Lightcurve(object):
                 if mix:
                     if model.default == True:                        
                         #kappa,theta,lnmu,lnsig,weight
-                        print "\nGamma Function:"
-                        print "kappa: {}".format(m['x'][0])
-                        print "theta: {}".format(m['x'][1])
-                        print "weight: {}".format(m['x'][4])
-                        print "\nLognormal Function:"
-                        print "exp(ln(mu)): {}".format(m['x'][2])
-                        print "ln(sigma): {}".format(m['x'][3])
-                        print "weight: {}".format(1.0 - m['x'][4])
+                        print ("\nGamma Function:")
+                        print ("kappa: {}".format(m['x'][0]))
+                        print ("theta: {}".format(m['x'][1]))
+                        print ("weight: {}".format(m['x'][4]))
+                        print ("\nLognormal Function:")
+                        print ("exp(ln(mu)): {}".format(m['x'][2]))
+                        print ("ln(sigma): {}".format(m['x'][3]))
+                        print ("weight: {}".format(1.0 - m['x'][4]))
                     else:
                         for p in range(len(m['x'])):
-                            print "Parameter {}: {}".format(p+1,m['x'][p])            
+                            print ("Parameter {}: {}".format(p+1,m['x'][p]))            
                 else:
                     for p in range(len(m['x'])):
-                        print "Parameter {}: {}".format(p+1,m['x'][p])
+                        print ("Parameter {}: {}".format(p+1,m['x'][p]))
                         
             self.pdfFit = m 
             self.pdfModel = model
 
         else:
-            print "#### FIT FAILED ####"
-            print "Fit parameters not assigned."
-            print "Try different initial parameters with the 'initial_params' keyword argument" 
+            print ("#### FIT FAILED ####")
+            print ("Fit parameters not assigned.")
+            print ("Try different initial parameters with the 'initial_params' keyword argument" )
               
     
     def Simulate_DE_Lightcurve(self,PSDmodel=None,PSDinitialParams=None,
@@ -1058,12 +1081,12 @@ class Lightcurve(object):
         if self.psdFit == None:
             
             if PSDmodel:
-                "Fitting PSD with supplied model..."
+                ("Fitting PSD with supplied model...")
                 self.Fit_PSD( initial_params= PSDinitialParams, 
                                  model = PSDmodel, fit_method=PSD_fit_method,
                                      n_iter=n_iter,verbose=False)
             else:
-                print "PSD not fitted, fitting using defaults (bending power law)..."
+                print ("PSD not fitted, fitting using defaults (bending power law)...")
                 self.Fit_PSD(verbose=False)
         if self.pdfFit == None and histSample == False:
             if PDFmodel:
@@ -1072,12 +1095,12 @@ class Lightcurve(object):
                         model= PDFmodel, fit_method = PDF_fit_method,
                         verbose=False, nbins=nbins)
             else:
-                print "PDF not fitted, fitting using defaults (gamma + lognorm)"
+                print ("PDF not fitted, fitting using defaults (gamma + lognorm)")
                 self.Fit_PDF(verbose=False)    
         
         # check if fits were successful
         if self.psdFit == None or (self.pdfFit == None and histSample == False): 
-            print "Simulation terminated due to failed fit(s)"
+            print ("Simulation terminated due to failed fit(s)")
             return
             
         # check if standard deviation has been given
@@ -1428,16 +1451,16 @@ def Load_Lightcurve(fileroute,tbin,\
                     two = True
 
             except IOError:
-                print "*** LOAD FAILED ***"
-                print "Input file not found"
+                print ("*** LOAD FAILED ***")
+                print ("Input file not found")
                 return
             except KeyError:
-                print "*** LOAD FAILED ***"
-                print "One or more fits columns not found in fits file"
+                print ("*** LOAD FAILED ***")
+                print ("One or more fits columns not found in fits file")
                 return
         else:            
-            print "*** LOAD FAILED ***"
-            print "time_col and flux_col must be defined to load data from fits."
+            print ("*** LOAD FAILED ***")
+            print ("time_col and flux_col must be defined to load data from fits.")
             return
     else:
         try:
@@ -1473,15 +1496,15 @@ def Load_Lightcurve(fileroute,tbin,\
                     except ValueError:
                         continue
             if success:
-                print "Read {} lines of data".format(read)
+                print ("Read {} lines of data".format(read))
             else:
-                print "*** LOAD FAILED ***"
-                print "Input file must be a text file with 3 columns (time,flux,error)"
+                print ("*** LOAD FAILED ***")
+                print ("Input file must be a text file with 3 columns (time,flux,error)")
                 return
 
         except IOError:
-            print "*** LOAD FAILED ***"
-            print "Input file not found"
+            print ("*** LOAD FAILED ***")
+            print ("Input file not found")
             return
        
     if two:
